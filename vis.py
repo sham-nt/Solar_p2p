@@ -166,8 +166,7 @@ def visualize_environment(env):
 
         for i, balance in enumerate(energy_balance[:-1]):  # Exclude grid from this loop
             if i < env.num_solar_owners:
-                start = solar_positions[
-i]
+                start = solar_positions[i]
             else:
                 start = non_solar_positions[i - env.num_solar_owners]
             
@@ -216,4 +215,3 @@ i]
 # Run the visualization
 env = SolarP2PEnv(num_solar_owners=5, num_non_solar_owners=5)
 visualize_environment(env)
-
