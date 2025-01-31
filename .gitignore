@@ -1,3 +1,10 @@
+# specific to Project
+dqn_solar_trading/
+ppo_solar_trading/
+dqn_performance_report.txt
+ppo_performance_report.txt
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

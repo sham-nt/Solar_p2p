@@ -9,7 +9,7 @@ from groq import Groq  # Import Groq API
 from tqdm import tqdm  # For progress bars
 
 # Set up Groq API client
-groq_client = Groq(api_key="your_groq_api_key")  # Replace with your Groq API key
+groq_client = Groq(api_key="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")  # Replace with your Groq API key
 
 # Define the environment
 def make_env():
@@ -103,7 +103,11 @@ dqn_mean_reward, dqn_std_reward = evaluate_model_with_timeout(dqn_model, vec_env
 ppo_mean_reward, ppo_std_reward = evaluate_model_with_timeout(ppo_model, vec_env, n_eval_episodes=3, max_steps_per_episode=1000)
 
 # Generate a performance report using Groq API
-def generate_performance_report(model_name, mean_reward, std_reward, solar_energy_used, grid_energy_used):
+def generate_performance_report(model_name, mean_reward, std_reward, env):
+    # Get energy usage from the environment
+    solar_energy_used = env.solar_energy_used
+    grid_energy_used = env.grid_energy_used
+
     prompt = f"""
     The {model_name} model was trained on the Solar P2P Energy Trading environment. 
     The mean reward achieved was {mean_reward} with a standard deviation of {std_reward}.
@@ -112,24 +116,24 @@ def generate_performance_report(model_name, mean_reward, std_reward, solar_energ
     """
     
     # Use Groq API to generate the report
-    response = groq_client.completions.create(
-        model="groq-llama",  # Replace with the appropriate Groq model name
-        prompt=prompt,
-        max_tokens=500,
-        temperature=0.7
-    )
-    return response.choices[0].text.strip()
-
-# Get energy usage from the environment
-solar_energy_used = env.solar_energy_used
-grid_energy_used = env.grid_energy_used
+    try:
+        response = groq_client.chat.completions.create(
+            model="deepseek-r1-distill-llama-70b",  # Replace with the appropriate Groq model name
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500,
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error generating report: {e}")
+        return "Error generating report."
 
 # Generate reports
 print("Generating performance reports...")
 with tqdm(total=2, desc="Generating Reports") as pbar:
-    dqn_report = generate_performance_report("DQN", dqn_mean_reward, dqn_std_reward, solar_energy_used, grid_energy_used)
+    dqn_report = generate_performance_report("DQN", dqn_mean_reward, dqn_std_reward, vec_env.envs[0])
     pbar.update(1)  # Update progress bar for DQN report
-    ppo_report = generate_performance_report("PPO", ppo_mean_reward, ppo_std_reward, solar_energy_used, grid_energy_used)
+    ppo_report = generate_performance_report("PPO", ppo_mean_reward, ppo_std_reward, vec_env.envs[0])
     pbar.update(1)  # Update progress bar for PPO report
 
 # Print reports
@@ -148,4 +152,4 @@ with open("ppo_performance_report.txt", "w") as f:
 # Run the visualization
 from vis import visualize_environment
 print("\nRunning visualization...")
-visualize_environment(env)
+visualize_environment(vec_env.envs[0])  # Use the first environment in the vectorized environment

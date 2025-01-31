@@ -146,7 +146,7 @@ def visualize_environment(env):
 
         # Take a random action
         action = env.action_space.sample()
-        state, reward, done, info = env.step(action)
+        state, reward, done, truncated, info = env.step(action)  # Updated for Gymnasium
         energy_balance = info["energy_balance"]
         solar_energy_used = info["solar_energy_used"]
         grid_energy_used = info["grid_energy_used"]
