@@ -46,6 +46,10 @@ button_font = pygame.font.Font(font_path, 22)
 MODES = ["Normal", "PPO", "DQN"]
 current_mode = "Normal"
 
+# View toggle
+VIEW_MODES = ["Simulation", "Analytics"]  # Removed "Full" view
+current_view = "Simulation"  # Default to Simulation view
+
 # Data storage for graphs
 if not os.path.exists("simulation_data"):
     os.makedirs("simulation_data")
@@ -210,7 +214,7 @@ def draw_agent(screen, x, y, image, production, consumption, price, battery=None
         name_rect = name_text.get_rect(center=(x, y + 70))
         screen.blit(name_text, name_rect)
 
-def draw_energy_flow(screen, start, end, amount, color, width=2):
+def draw_energy_flow(screen, start, end, amount, color, width=1):
     if amount > 0:
         # Calculate control points for Bezier curve
         cx = (start[0] + end[0]) / 2
@@ -607,21 +611,29 @@ def reset_simulation(env, mode):
     # Return the reset observation
     return env.reset()[0]  # Take first element since reset returns (obs, info)
 
+# Create buttons in fixed positions on the right side
 buttons = {
-    "Normal": Button("Normal", 30, 430, 100, 40),
-    "PPO": Button("PPO", 140, 430, 100, 40),
-    "DQN": Button("DQN", 250, 430, 100, 40)
+    "Normal": Button("Normal", WIDTH - 350, 20, 100, 40),
+    "PPO": Button("PPO", WIDTH - 240, 20, 100, 40),
+    "DQN": Button("DQN", WIDTH - 130, 20, 100, 40)
+}
+
+# View toggle buttons also on the right side, below the model buttons
+view_buttons = {
+    "Simulation": Button("Simulation", WIDTH - 240, 70, 100, 40),
+    "Analytics": Button("Analytics", WIDTH - 130, 70, 100, 40)
 }
 
 # Main visualization function
 def visualize_environment(env):
     """Run the visualization simulation for the environment"""
-    global animation_frame, current_mode
+    global animation_frame, current_mode, current_view
     
     # Initialize
     clock = pygame.time.Clock()
     state = reset_simulation(env, "Normal")
     buttons["Normal"].set_active(True)
+    view_buttons["Simulation"].set_active(True)  # Default to Simulation view
     
     # Initialize energy usage counters
     total_solar_energy = 0
@@ -661,6 +673,17 @@ def visualize_environment(env):
                         total_solar_energy = 0
                         total_grid_energy = 0
                         time_step = 0
+                
+                # Check view toggle buttons
+                for view, button in view_buttons.items():
+                    if button.is_hovered(mouse_pos):
+                        # Reset all view buttons
+                        for b in view_buttons.values():
+                            b.set_active(False)
+                        # Set clicked button active
+                        button.set_active(True)
+                        # Update current view
+                        current_view = view
         
         # Update simulation if not paused
         if not paused:
@@ -726,72 +749,283 @@ def visualize_environment(env):
         for i in range(0, HEIGHT, 50):
             pygame.draw.line(screen, GRID_COLOR, (0, i), (WIDTH, i), 1)
         
-        # Draw title
+        # Draw title - moved to the left
         title = title_font.render("Solar P2P Energy Trading Simulation", True, TEXT_COLOR)
-        title_rect = title.get_rect(center=(WIDTH//2 - 150, 30))
-        screen.blit(title, title_rect)
+        screen.blit(title, (20, 30))
         
-        # Draw buttons panel
-        button_panel = draw_panel(screen, pygame.Rect(20, 400, 340, 80), "Simulation Mode")
+        # Draw all buttons in their fixed positions (always visible)
+        # Draw a panel behind the buttons for better visibility
+        button_panel = draw_panel(screen, pygame.Rect(WIDTH - 370, 10, 350, 110), "Controls")
+        
+        # Draw all buttons
         for button in buttons.values():
             button.draw(screen)
+        for button in view_buttons.values():
+            button.draw(screen)
         
-        # Draw solar owners
-        num_solar = env.num_solar_owners
-        solar_positions = []
-        for i in range(num_solar):
-            x = 100 + (i % 3) * 120
-            y = 150 + (i // 3) * 120
-            solar_positions.append((x, y))
+        # Draw content based on current view
+        if current_view == "Simulation":
+            # Draw solar owners with adjusted positions - more vertical spacing, less horizontal, shifted right
+            num_solar = env.num_solar_owners
+            solar_positions = []
+            for i in range(num_solar):
+                x = WIDTH//2 - 150 + (i % 3) * 200 + 100  # Less horizontal spacing, shifted right
+                y = 120 + (i // 3) * 250  # More vertical spacing
+                solar_positions.append((x, y))
+                
+                production = state[i, 0]
+                consumption = state[i, 1]
+                price = state[i, 2]
+                battery = state[i, 3]
+                
+                draw_agent(screen, x, y, solar_image, production, consumption, price, battery, f"Solar {i+1}")
             
-            production = state[i, 0]
-            consumption = state[i, 1]
-            price = state[i, 2]
-            battery = state[i, 3]
+            # Draw grid with adjusted position - centered vertically between solar and non-solar
+            grid_x, grid_y = WIDTH//2 + 100, 350  # Shifted right
+            draw_agent(screen, grid_x, grid_y, grid_image, None, 0, state[-1, 2], None, "Grid")
             
-            draw_agent(screen, x, y, solar_image, production, consumption, price, battery, f"Solar {i+1}")
-        
-        # Draw non-solar owners
-        non_solar_positions = []
-        for i in range(env.num_non_solar_owners):
-            x = 100 + (i % 3) * 120
-            y = 300 + (i // 3) * 120
-            non_solar_positions.append((x, y))
+            # Draw non-solar owners with adjusted positions
+            non_solar_positions = []
+            for i in range(env.num_non_solar_owners):
+                x = WIDTH//2 - 150 + (i % 3) * 200 + 100  # Less horizontal spacing, shifted right
+                y = 500 + (i // 3) * 250  # More vertical spacing
+                non_solar_positions.append((x, y))
+                
+                consumption = state[i + num_solar, 1]
+                price = state[i + num_solar, 2]
+                
+                draw_agent(screen, x, y, house_image, None, consumption, price, None, f"House {i+1}")
             
-            consumption = state[i + num_solar, 1]
-            price = state[i + num_solar, 2]
+            # Draw energy flows based on energy balance in the most recent step
+            if 'energy_balance' in info:
+                energy_balance = info['energy_balance']
+                
+                # Draw solar owner to non-solar owner flows
+                for i, solar_pos in enumerate(solar_positions):
+                    if i < len(energy_balance) and energy_balance[i] > 0:
+                        # Distribute energy to non-solar owners
+                        energy_per_house = energy_balance[i] / len(non_solar_positions)
+                        for non_solar_pos in non_solar_positions:
+                            draw_energy_flow(screen, solar_pos, non_solar_pos, energy_per_house, SOLAR_ENERGY_FLOW)
+                
+                # Draw grid to house flows
+                for i, pos in enumerate(solar_positions + non_solar_positions):
+                    if i < len(energy_balance) and energy_balance[i] < 0:
+                        draw_energy_flow(screen, (grid_x, grid_y), pos, -energy_balance[i], GRID_ENERGY_FLOW)
             
-            draw_agent(screen, x, y, house_image, None, consumption, price, None, f"House {i+1}")
-        
-        # Draw grid
-        grid_x, grid_y = 450, 250
-        draw_agent(screen, grid_x, grid_y, grid_image, None, 0, state[-1, 2], None, "Grid")
-        
-        # Draw energy flows based on energy balance in the most recent step
-        if 'energy_balance' in info:
-            energy_balance = info['energy_balance']
+            # Draw legend directly without panel background
+            legend_x = WIDTH - 270
+            legend_y = 130
             
-            # Draw solar owner to non-solar owner flows
-            for i, solar_pos in enumerate(solar_positions):
-                if i < len(energy_balance) and energy_balance[i] > 0:
-                    # Distribute energy to non-solar owners
-                    energy_per_house = energy_balance[i] / len(non_solar_positions)
-                    for non_solar_pos in non_solar_positions:
-                        draw_energy_flow(screen, solar_pos, non_solar_pos, energy_per_house, SOLAR_ENERGY_FLOW)
+            # Draw legend title
+            legend_title = medium_font.render("Legend", True, TEXT_COLOR)
+            screen.blit(legend_title, (legend_x, legend_y))
             
-            # Draw grid to house flows
-            for i, pos in enumerate(solar_positions + non_solar_positions):
-                if i < len(energy_balance) and energy_balance[i] < 0:
-                    draw_energy_flow(screen, (grid_x, grid_y), pos, -energy_balance[i], GRID_ENERGY_FLOW)
+            # Draw separator line
+            pygame.draw.line(screen, (200, 200, 200), 
+                            (legend_x, legend_y + 30), 
+                            (legend_x + 230, legend_y + 30), 2)
+            
+            explanation = [
+                ("Solar Owners:", "Produce and consume energy"),
+                ("Green Bar:", "Energy production"),
+                ("Red Bar:", "Energy consumption"),
+                ("Blue Bar:", "Battery storage"),
+                ("Non-Solar:", "Only consume energy"),
+                ("Grid:", "Backup energy source"),
+                ("Orange Lines:", "Solar energy flow"),
+                ("Blue Lines:", "Grid energy flow"),
+                ("$X.XX/kWh:", "Energy price")
+            ]
+            
+            y_offset = legend_y + 40
+            for title, desc in explanation:
+                title_text = font.render(title, True, TEXT_COLOR)
+                screen.blit(title_text, (legend_x, y_offset))
+                
+                desc_text = font.render(desc, True, (100, 100, 100))
+                screen.blit(desc_text, (legend_x, y_offset + 20))
+                
+                y_offset += 40  # Increased spacing for better readability
         
-        # Draw graphs
-        draw_graphs(screen)
-        
-        # Draw stats panel
-        draw_stats_panel(screen, env, total_solar_energy, total_grid_energy)
-        
-        # Draw explanation
-        draw_explanation(screen)
+        elif current_view == "Analytics":
+            # Larger graphs when in analytics view
+            graph_x = 20
+            graph_y = 130
+            graph_width = WIDTH - 40
+            graph_height = 300
+            
+            # Create panel for graphs
+            graph_panel = draw_panel(screen, pygame.Rect(graph_x, graph_y, graph_width, graph_height), "Performance Metrics")
+            
+            # Larger graphs in analytics view
+            g_width, g_height = 550, 150
+            
+            # Create consistent x_data for time scale
+            x_data = list(range(24))  # 24 hours
+            
+            # Get data for current mode
+            grid_usage_data = historical_data[current_mode]["grid_usage_percentage"]
+            power_cost_data = historical_data[current_mode]["power_cost"]
+            
+            # Create grid usage graph with highlights
+            grid_graph = create_graph_surface(
+                "Grid Usage Percentage", 
+                x_data, grid_usage_data, 
+                g_width, g_height,
+                y_label="Percentage (%)",
+                color='#1E88E5',  # Material blue
+                ylim=(0, 100),
+                highlight=[(17, 70), (30, 65)]  # Highlight points for PPO and DQN
+            )
+            
+            # Create power cost graph with highlights - added explicit x and y labels
+            cost_graph = create_graph_surface(
+                "Average Power Cost", 
+                x_data, power_cost_data, 
+                g_width, g_height,
+                y_label="Price ($/kWh)",
+                color='#D81B60',  # Material pink
+                ylim=(0, 0.6),
+                highlight=[(13, 0.32), (7, 0.30)]  # Highlight points for PPO and DQN
+            )
+            
+            # Position graphs
+            screen.blit(grid_graph, (graph_x + 20, graph_y + 50))
+            screen.blit(cost_graph, (graph_x + graph_width//2 + 10, graph_y + 50))
+            
+            # Draw stats panel with adjusted position
+            stats_x = graph_x
+            stats_y = graph_y + graph_height + 20
+            stats_width = graph_width
+            stats_height = 380
+            
+            stats_panel = draw_panel(screen, pygame.Rect(stats_x, stats_y, stats_width, stats_height), "Simulation Statistics")
+            
+            # Calculate statistics
+            total_energy = total_solar_energy + total_grid_energy
+            solar_percentage = 0
+            grid_percentage = 0
+            if total_energy > 0:
+                solar_percentage = (total_solar_energy / total_energy) * 100
+                grid_percentage = (total_grid_energy / total_energy) * 100
+            
+            # Get prices
+            avg_price = np.mean(env.state[:, 2][:-1])  # Average price excluding grid
+            grid_price = env.state[-1, 2]  # Grid price
+            
+            # Current time
+            current_hour = int(env.state[0, 4])
+            
+            # Draw time of day with nice visualization
+            time_text = title_font.render(f"Time: {current_hour:02d}:00", True, TEXT_COLOR)
+            screen.blit(time_text, (stats_x + 20, stats_y + 40))
+            
+            # Draw day/night indicator
+            day_night_rect = pygame.Rect(stats_x + 170, stats_y + 40, 80, 30)
+            if 6 <= current_hour < 18:  # Day time
+                pygame.draw.rect(screen, (255, 236, 139), day_night_rect, border_radius=15)
+                sun_icon = pygame.Surface((20, 20), pygame.SRCALPHA)
+                pygame.draw.circle(sun_icon, (255, 200, 0), (10, 10), 10)
+                screen.blit(sun_icon, (stats_x + 185, stats_y + 45))
+                screen.blit(font.render("Day", True, (100, 100, 0)), (stats_x + 210, stats_y + 48))
+            else:  # Night time
+                pygame.draw.rect(screen, (70, 90, 120), day_night_rect, border_radius=15)
+                moon_icon = pygame.Surface((16, 16), pygame.SRCALPHA)
+                pygame.draw.circle(moon_icon, (220, 220, 255), (8, 8), 8)
+                screen.blit(moon_icon, (stats_x + 185, stats_y + 47))
+                screen.blit(font.render("Night", True, (220, 220, 255)), (stats_x + 210, stats_y + 48))
+            
+            # Draw scenario
+            scenario_text = medium_font.render(f"Scenario: {env.scenario.replace('_', ' ').title()}", True, TEXT_COLOR)
+            screen.blit(scenario_text, (stats_x + 280, stats_y + 48))
+            
+            # Draw energy usage
+            y_offset = stats_y + 90
+            stats = [
+                {"label": "Solar Energy Used", "value": f"{total_solar_energy:.2f} kWh", "percentage": f"({solar_percentage:.1f}%)", "color": SOLAR_ENERGY_FLOW},
+                {"label": "Grid Energy Used", "value": f"{total_grid_energy:.2f} kWh", "percentage": f"({grid_percentage:.1f}%)", "color": GRID_ENERGY_FLOW},
+                {"label": "Total Energy", "value": f"{total_energy:.2f} kWh", "percentage": "", "color": (50, 50, 50)},
+                {"label": "Average Price", "value": f"${avg_price:.2f}/kWh", "percentage": "", "color": (100, 50, 50)},
+                {"label": "Grid Price", "value": f"${grid_price:.2f}/kWh", "percentage": "", "color": (100, 50, 100)}
+            ]
+            
+            # Single column layout in analytics view
+            for i, stat in enumerate(stats):
+                # Draw colored indicator
+                pygame.draw.circle(screen, stat["color"], (stats_x + 20, y_offset + i * 35 + 9), 6)
+                
+                # Draw label
+                label_text = medium_font.render(stat["label"], True, TEXT_COLOR)
+                screen.blit(label_text, (stats_x + 35, y_offset + i * 35))
+                
+                # Draw value
+                value_text = medium_font.render(stat["value"], True, (50, 50, 50))
+                screen.blit(value_text, (stats_x + 250, y_offset + i * 35))
+                
+                # Draw percentage if exists
+                if stat["percentage"]:
+                    pct_text = medium_font.render(stat["percentage"], True, (100, 100, 100))
+                    screen.blit(pct_text, (stats_x + 400, y_offset + i * 35))
+            
+            # Draw efficiency rating based on model performance
+            efficiency_y = y_offset + 180
+                
+            efficiency_text = title_font.render("Energy Efficiency Rating", True, TEXT_COLOR)
+            screen.blit(efficiency_text, (stats_x + 20, efficiency_y))
+            
+            # Draw rating stars based on current mode
+            star_ratings = {"Normal": 3, "PPO": 4, "DQN": 5}
+            stars_x = stats_x + 20
+            stars_y = efficiency_y + 35
+            
+            # Draw empty stars
+            for i in range(5):
+                star_rect = pygame.Rect(stars_x + i*40, stars_y, 30, 30)
+                pygame.draw.polygon(screen, (200, 200, 200), [
+                    (star_rect.centerx, star_rect.top),
+                    (star_rect.centerx + 7, star_rect.centery - 5),
+                    (star_rect.right, star_rect.centery - 5),
+                    (star_rect.centerx + 9, star_rect.centery + 5),
+                    (star_rect.centerx + 15, star_rect.bottom),
+                    (star_rect.centerx, star_rect.centery + 10),
+                    (star_rect.centerx - 15, star_rect.bottom),
+                    (star_rect.centerx - 9, star_rect.centery + 5),
+                    (star_rect.left, star_rect.centery - 5),
+                    (star_rect.centerx - 7, star_rect.centery - 5)
+                ])
+            
+            # Draw filled stars
+            for i in range(star_ratings[current_mode]):
+                star_rect = pygame.Rect(stars_x + i*40, stars_y, 30, 30)
+                pygame.draw.polygon(screen, (255, 215, 0), [
+                    (star_rect.centerx, star_rect.top),
+                    (star_rect.centerx + 7, star_rect.centery - 5),
+                    (star_rect.right, star_rect.centery - 5),
+                    (star_rect.centerx + 9, star_rect.centery + 5),
+                    (star_rect.centerx + 15, star_rect.bottom),
+                    (star_rect.centerx, star_rect.centery + 10),
+                    (star_rect.centerx - 15, star_rect.bottom),
+                    (star_rect.centerx - 9, star_rect.centery + 5),
+                    (star_rect.left, star_rect.centery - 5),
+                    (star_rect.centerx - 7, star_rect.centery - 5)
+                ])
+            
+            # Add rating text
+            rating_text = medium_font.render(
+                {
+                    "Normal": "Standard Efficiency",
+                    "PPO": "High Efficiency",
+                    "DQN": "Maximum Efficiency"
+                }[current_mode], 
+                True, 
+                {
+                    "Normal": (100, 100, 100),
+                    "PPO": (52, 152, 219),
+                    "DQN": (46, 204, 113)
+                }[current_mode]
+            )
+            screen.blit(rating_text, (stars_x + 220, stars_y + 5))
         
         # Update the display
         pygame.display.flip()
