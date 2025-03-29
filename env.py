@@ -33,25 +33,25 @@ class SolarP2PEnv(gym.Env):
     def reset(self, seed=None, options=None):
         # Initialize state
         self.state = np.zeros((self.num_agents, 5))
-        
+    
         # Set initial energy production for solar owners
         self.state[:self.num_solar_owners, 0] = self.np_random.uniform(0, 1, self.num_solar_owners)
-        
+    
         # Set initial energy consumption for all owners
         self.state[:self.num_solar_owners + self.num_non_solar_owners, 1] = self.np_random.uniform(0, 1, self.num_solar_owners + self.num_non_solar_owners)
-        
+    
         # Set initial prices
         self.state[:, 2] = self.np_random.uniform(0.1, 0.5, self.num_agents)
-        
+    
         # Set initial battery levels for solar owners
         self.state[:self.num_solar_owners, 3] = self.np_random.uniform(0, 1, self.num_solar_owners)
-        
+    
         # Set initial time of day (0-24 hours)
         self.state[:, 4] = 0
-        
+    
         self.solar_energy_used = 0
         self.grid_energy_used = 0
-        
+    
         return self.state, {}  # Return observation and info (empty dict)
     
     def step(self, action):
