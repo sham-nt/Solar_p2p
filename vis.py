@@ -570,9 +570,9 @@ def draw_stats_panel(screen, env, solar_energy_used, grid_energy_used):
     # Add rating text
     rating_text = medium_font.render(
         {
-            "Normal": "Standard Efficiency",
-            "PPO": "High Efficiency",
-            "DQN": "Maximum Efficiency"
+            "Normal": "Standard",
+            "PPO": "High",
+            "DQN": "Max"
         }[current_mode], 
         True, 
         {
@@ -582,6 +582,52 @@ def draw_stats_panel(screen, env, solar_energy_used, grid_energy_used):
         }[current_mode]
     )
     screen.blit(rating_text, (stars_x + 220, stars_y + 5))
+
+    # Add model comparison section
+    comparison_y = stars_y + 50
+    comparison_text = title_font.render("Model Performance Comparison", True, TEXT_COLOR)
+    screen.blit(comparison_text, (stars_x + 20, comparison_y))
+
+    # Calculate average metrics for comparison
+    avg_normal_grid = sum(historical_data["Normal"]["grid_usage_percentage"]) / 24
+    avg_normal_cost = sum(historical_data["Normal"]["power_cost"]) / 24
+    avg_ppo_grid = sum(historical_data["PPO"]["grid_usage_percentage"]) / 24
+    avg_ppo_cost = sum(historical_data["PPO"]["power_cost"]) / 24
+    avg_dqn_grid = sum(historical_data["DQN"]["grid_usage_percentage"]) / 24
+    avg_dqn_cost = sum(historical_data["DQN"]["power_cost"]) / 24
+
+    # Calculate improvement percentages
+    ppo_grid_improvement = ((avg_normal_grid - avg_ppo_grid) / avg_normal_grid) * 100
+    ppo_cost_improvement = ((avg_normal_cost - avg_ppo_cost) / avg_normal_cost) * 100
+    dqn_grid_improvement = ((avg_normal_grid - avg_dqn_grid) / avg_normal_grid) * 100
+    dqn_cost_improvement = ((avg_normal_cost - avg_dqn_cost) / avg_normal_cost) * 100
+
+    # Average improvement
+    ppo_improvement = (ppo_grid_improvement + ppo_cost_improvement) / 2
+    dqn_improvement = (dqn_grid_improvement + dqn_cost_improvement) / 2
+
+    # Create comparison panel
+    comparison_panel = pygame.Rect(stars_x + 20, comparison_y + 40, 200, 100)
+    pygame.draw.rect(screen, (240, 240, 240), comparison_panel, border_radius=8)
+    pygame.draw.rect(screen, (200, 200, 200), comparison_panel, width=1, border_radius=8)
+
+    # Draw PPO comparison
+    ppo_text = medium_font.render(f"PPO is {ppo_improvement:.1f}% more efficient than Normal", True, (52, 152, 219))
+    screen.blit(ppo_text, (stars_x + 30, comparison_y + 55))
+
+    # Draw PPO improvement bar
+    ppo_bar_rect = pygame.Rect(stars_x + 30, comparison_y + 85, int((200 - 60) * (ppo_improvement/100)), 15)
+    pygame.draw.rect(screen, (200, 200, 200), (stars_x + 30, comparison_y + 85, 200 - 60, 15), border_radius=7)
+    pygame.draw.rect(screen, (52, 152, 219), ppo_bar_rect, border_radius=7)
+
+    # Draw DQN comparison
+    dqn_text = medium_font.render(f"DQN is {dqn_improvement:.1f}% more efficient than Normal", True, (46, 204, 113))
+    screen.blit(dqn_text, (stars_x + 30, comparison_y + 110))
+
+    # Draw DQN improvement bar
+    dqn_bar_rect = pygame.Rect(stars_x + 30, comparison_y + 140, int((200 - 60) * (dqn_improvement/100)), 15)
+    pygame.draw.rect(screen, (200, 200, 200), (stars_x + 30, comparison_y + 140, 200 - 60, 15), border_radius=7)
+    pygame.draw.rect(screen, (46, 204, 113), dqn_bar_rect, border_radius=7)
 
 def draw_explanation(screen):
     # Create panel for explanation
@@ -723,10 +769,20 @@ def visualize_environment(env):
                 # PPO tries to minimize grid dependency
                 time_of_day = state[0, 4]
                 solar_production = state[:env.num_solar_owners, 0].mean()
-                if solar_production > 0.6:  # Good solar production
-                    action = 7  # Store more energy
+                battery_level = state[:env.num_solar_owners, 3].mean()
+                
+                if 7 <= time_of_day <= 17:  # Daylight hours
+                    if solar_production > 0.4:  # Good solar production
+                        action = 7  # Store more energy
+                    else:
+                        action = 5  # Balanced approach
+                elif 18 <= time_of_day <= 22:  # Evening peak
+                    if battery_level > 0.3:
+                        action = 3  # Use stored energy
+                    else:
+                        action = 4  # Slightly conservative
                 else:
-                    action = 3  # Use stored energy
+                    action = 5  # Balanced approach at night
             elif current_mode == "DQN":
                 # DQN is more sophisticated with timing
                 time_of_day = state[0, 4]
@@ -889,8 +945,8 @@ def visualize_environment(env):
                 desc_text = font.render(desc, True, (100, 100, 100))
                 screen.blit(desc_text, (legend_x + 120, legend_y + i * 30))
             
-            # Add simulation statistics panel on the right side
-            stats_x = WIDTH - 300
+            # Add simulation statistics panel on the right side - moved to the left
+            stats_x = WIDTH - 350  # Changed from WIDTH - 300 to move it left
             stats_y = 130
             stats_width = 280
             stats_height = 350
@@ -960,48 +1016,49 @@ def visualize_environment(env):
             
             # Draw efficiency rating
             efficiency_y = y_offset + 180
-            efficiency_text = medium_font.render("Energy Efficiency Rating", True, TEXT_COLOR)
+                
+            efficiency_text = title_font.render("Energy Efficiency Rating", True, TEXT_COLOR)
             screen.blit(efficiency_text, (stats_x + 20, efficiency_y))
             
             # Draw rating stars based on current mode
             star_ratings = {"Normal": 3, "PPO": 4, "DQN": 5}
             stars_x = stats_x + 20
-            stars_y = efficiency_y + 30
+            stars_y = efficiency_y + 35
             
             # Draw empty stars
             for i in range(5):
-                star_rect = pygame.Rect(stars_x + i*30, stars_y, 25, 25)
+                star_rect = pygame.Rect(stars_x + i*40, stars_y, 30, 30)
                 pygame.draw.polygon(screen, (200, 200, 200), [
                     (star_rect.centerx, star_rect.top),
-                    (star_rect.centerx + 6, star_rect.centery - 4),
-                    (star_rect.right, star_rect.centery - 4),
-                    (star_rect.centerx + 8, star_rect.centery + 4),
-                    (star_rect.centerx + 12, star_rect.bottom),
+                    (star_rect.centerx + 7, star_rect.centery - 5),
+                    (star_rect.right, star_rect.centery - 5),
+                    (star_rect.centerx + 9, star_rect.centery + 5),
+                    (star_rect.centerx + 15, star_rect.bottom),
                     (star_rect.centerx, star_rect.centery + 10),
                     (star_rect.centerx - 15, star_rect.bottom),
                     (star_rect.centerx - 9, star_rect.centery + 5),
-                    (star_rect.left, star_rect.centery - 4),
-                    (star_rect.centerx - 7, star_rect.centery - 4)
+                    (star_rect.left, star_rect.centery - 5),
+                    (star_rect.centerx - 7, star_rect.centery - 5)
                 ])
             
             # Draw filled stars
             for i in range(star_ratings[current_mode]):
-                star_rect = pygame.Rect(stars_x + i*30, stars_y, 25, 25)
+                star_rect = pygame.Rect(stars_x + i*40, stars_y, 30, 30)
                 pygame.draw.polygon(screen, (255, 215, 0), [
                     (star_rect.centerx, star_rect.top),
-                    (star_rect.centerx + 6, star_rect.centery - 4),
-                    (star_rect.right, star_rect.centery - 4),
-                    (star_rect.centerx + 8, star_rect.centery + 4),
-                    (star_rect.centerx + 12, star_rect.bottom),
+                    (star_rect.centerx + 7, star_rect.centery - 5),
+                    (star_rect.right, star_rect.centery - 5),
+                    (star_rect.centerx + 9, star_rect.centery + 5),
+                    (star_rect.centerx + 15, star_rect.bottom),
                     (star_rect.centerx, star_rect.centery + 10),
                     (star_rect.centerx - 15, star_rect.bottom),
                     (star_rect.centerx - 9, star_rect.centery + 5),
-                    (star_rect.left, star_rect.centery - 4),
-                    (star_rect.centerx - 7, star_rect.centery - 4)
+                    (star_rect.left, star_rect.centery - 5),
+                    (star_rect.centerx - 7, star_rect.centery - 5)
                 ])
             
             # Add rating text
-            rating_text = font.render(
+            rating_text = medium_font.render(
                 {
                     "Normal": "Standard Efficiency",
                     "PPO": "High Efficiency",
@@ -1014,7 +1071,7 @@ def visualize_environment(env):
                     "DQN": (46, 204, 113)
                 }[current_mode]
             )
-            screen.blit(rating_text, (stars_x + 160, stars_y + 5))
+            screen.blit(rating_text, (stars_x + 220, stars_y + 5))
         
         elif current_view == "Analytics":
             # Larger graphs when in analytics view
